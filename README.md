@@ -40,8 +40,6 @@ El objetivo de este laboratorio es **implementar y verificar una VPN Client-to-S
 * La asignación dinámica de direcciones IP a los clientes conectados mediante un pool local (`20.25.37.100–20.25.37.110`), permitiendo que el cliente acceda a la red interna del servidor como si estuviera conectado localmente.
 * La verificación de conectividad desde el cliente remoto hacia la red interna (`20.25.37.0/25`) a través del túnel L2TP/IPSec establecido con R2.
 
-Este laboratorio se realiza en un entorno controlado con fines **exclusivamente educativos** dentro del curso de Seguridad de Redes del ITLA.
-
 ---
 
 ## 2. Marco Teórico
