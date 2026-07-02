@@ -63,9 +63,9 @@ CLIENTE                                          SERVIDOR (R2)
 ─────────────────────────────────────────────────────────────
   │                                                     │
   │  ┌─────────────────────────────────────────────┐    │
-  │  │             IPSec ESP (cifrado)             │    │
+  │  │            IPSec ESP (cifrado)              │    │
   │  │  ┌──────────────────────────────────────┐   │    │
-  │  │  │       L2TP (túnel UDP 1701)          │   │    │
+  │  │  │        L2TP (túnel UDP 1701)         │   │    │
   │  │  │  ┌───────────────────────────────┐   │   │    │
   │  │  │  │  PPP (autenticación + datos)  │   │   │    │
   │  │  │  │  ┌────────────────────────┐   │   │   │    │
@@ -341,84 +341,90 @@ interface Virtual-Template1
  ppp authentication ms-chap-v2 chap
 ```
 
-### 4.4 Configuración del Cliente Linux
+### 4.4 Configuración del Cliente — Windows 7 (cliente nativo)
 
-El cliente Linux usa `xl2tpd` y `strongSwan` (o `ipsec-tools`) para conectarse al servidor L2TP/IPSec.
+Windows 7 incluye soporte nativo de L2TP/IPSec sin necesidad de instalar software adicional. La configuración se realiza desde el **Centro de redes y recursos compartidos**.
 
-**Instalar dependencias:**
+**Paso 1 — Abrir el asistente de nueva conexión:**
 
-```bash
-sudo apt-get install xl2tpd strongswan -y
+```
+Panel de control
+  → Centro de redes y recursos compartidos
+    → Configurar una nueva conexión o red
+      → Conectarse a un área de trabajo
+        → Usar mi conexión a Internet (VPN)
 ```
 
-**Archivo `/etc/ipsec.conf`:**
+**Paso 2 — Datos de la conexión:**
 
-```bash
-config setup
-    charondebug="ike 1, knl 1, cfg 0"
+| Campo | Valor |
+|---|---|
+| **Dirección de Internet** | `192.168.1.6` (IP WAN del servidor R2) |
+| **Nombre de destino** | `VPN-ITLA-L2TP` (cualquier nombre descriptivo) |
+| **Usar mi conexión a Internet** | ✅ Seleccionado |
 
-conn L2TP-VPN
-    authby=secret
-    auto=add
-    keyexchange=ikev1
-    left=%defaultroute
-    leftprotoport=17/1701
-    right=192.168.1.6
-    rightprotoport=17/1701
-    type=transport
-    ike=3des-sha1-modp1024
-    esp=3des-md5
+**Paso 3 — Credenciales de usuario:**
+
+| Campo | Valor |
+|---|---|
+| **Nombre de usuario** | `cliente1` |
+| **Contraseña** | `cisco123` |
+
+**Paso 4 — Configurar el tipo de VPN y la PSK:**
+
+Una vez creada la conexión, ir a:
+
+```
+Panel de control
+  → Centro de redes y recursos compartidos
+    → Cambiar configuración del adaptador
+      → Clic derecho en VPN-ITLA-L2TP → Propiedades
 ```
 
-**Archivo `/etc/ipsec.secrets`:**
+En la pestaña **Seguridad**:
 
-```bash
-%any 192.168.1.6 : PSK "MiClaveVPN123"
+| Parámetro | Valor |
+|---|---|
+| **Tipo de VPN** | L2TP/IPSec |
+| **Configuración avanzada** → Clave precompartida | `MiClaveVPN123` |
+| **Permitir estos protocolos** | ✅ MS-CHAP v2 |
+
+> **Nota crítica en Windows 7:** Si el cliente está detrás de NAT (como en este laboratorio — detrás de R1), es necesario agregar una clave de registro para que Windows permita L2TP/IPSec con NAT. Sin este fix, la conexión falla silenciosamente.
+
+**Paso 5 — Fix de registro para L2TP/IPSec detrás de NAT (obligatorio):**
+
+Abrir `regedit` y navegar a:
+
+```
+HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\PolicyAgent
 ```
 
-**Archivo `/etc/xl2tpd/xl2tpd.conf`:**
+Crear un valor DWORD (32 bits) llamado `AssumeUDPEncapsulationContextOnSendRule` con valor `2`:
 
-```bash
-[lac vpn-servidor]
-lns = 192.168.1.6
-ppp debug = yes
-pppoptfile = /etc/ppp/options.l2tpd.client
-length bit = yes
+```
+Nombre:  AssumeUDPEncapsulationContextOnSendRule
+Tipo:    DWORD (32 bits)
+Valor:   2
 ```
 
-**Archivo `/etc/ppp/options.l2tpd.client`:**
+> Valor `2` = permite L2TP/IPSec cuando tanto el cliente como el servidor están detrás de NAT. **Reiniciar Windows** después de aplicar este cambio.
 
-```bash
-ipcp-accept-local
-ipcp-accept-remote
-refuse-eap
-require-mschap-v2
-noccp
-noauth
-mtu 1280
-mru 1280
-noipdefault
-defaultroute
-usepeerdns
-connect-delay 5000
-name cliente1
-password cisco123
+**Paso 6 — Conectar:**
+
+```
+Panel de control
+  → Centro de redes y recursos compartidos
+    → Cambiar configuración del adaptador
+      → Clic derecho en VPN-ITLA-L2TP → Conectar
 ```
 
-**Iniciar la conexión:**
+**Verificar IP asignada (cmd):**
 
-```bash
-sudo ipsec restart
-sudo service xl2tpd restart
-sudo ipsec up L2TP-VPN
-echo "c vpn-servidor" | sudo tee /var/run/xl2tpd/l2tp-control
+```cmd
+ipconfig /all
 ```
 
-**Verificar la interfaz VPN asignada:**
-
-```bash
-ip addr show ppp0
-```
+Buscar el adaptador **"Conexión de área local* X"** o **"VPN-ITLA-L2TP"** — debe mostrar una IP del rango `20.25.37.100 – 20.25.37.110`.
 
 ---
 
@@ -518,21 +524,32 @@ POOL-VPN      20.25.37.100    20.25.37.110    10    1
 
 ### 5.6 Verificar conectividad del cliente hacia la red interna
 
-Desde el **Cliente Linux** (con la VPN activa):
+Desde el **Cliente Windows 7** (con la VPN activa), abrir `cmd`:
 
-```bash
-ping 20.25.37.2 -c 4
+```cmd
+ping 20.25.37.2
 ```
 
 *Resultado esperado:*
 
 ```
-PING 20.25.37.2 (20.25.37.2) 56(84) bytes of data.
-64 bytes from 20.25.37.2: icmp_seq=1 ttl=63 time=X ms
-64 bytes from 20.25.37.2: icmp_seq=2 ttl=63 time=X ms
+Haciendo ping a 20.25.37.2 con 32 bytes de datos:
+Respuesta desde 20.25.37.2: bytes=32 tiempo=Xms TTL=63
+Respuesta desde 20.25.37.2: bytes=32 tiempo=Xms TTL=63
+Respuesta desde 20.25.37.2: bytes=32 tiempo=Xms TTL=63
+Respuesta desde 20.25.37.2: bytes=32 tiempo=Xms TTL=63
+
+Estadísticas de ping para 20.25.37.2:
+    Paquetes: enviados = 4, recibidos = 4, perdidos = 0 (0% perdidos)
 ```
 
-> TTL=63 (en vez de 64) indica que el paquete pasó por un router (R2) para llegar a PC1. La conectividad desde un cliente remoto a la red interna confirma el funcionamiento completo de la VPN.
+> TTL=63 (en vez de 64) indica que el paquete pasó por R2 para llegar a PC1. Verificar también la IP asignada:
+
+```cmd
+ipconfig /all
+```
+
+Buscar el adaptador VPN — debe mostrar una dirección IP en el rango `20.25.37.100 – 20.25.37.110`.
 
 ---
 
@@ -546,8 +563,8 @@ PING 20.25.37.2 (20.25.37.2) 56(84) bytes of data.
 | `show vpdn tunnel` | R2 | Información del túnel L2TP establecido |
 | `show ip local pool POOL-VPN` | R2 | IPs del pool en uso |
 | `show ppp all` | R2 | Estado de las sesiones PPP activas |
-| `ip addr show ppp0` | Cliente Linux | IP asignada al cliente por el servidor |
-| `ping 20.25.37.2 -c 4` | Cliente Linux | Conectividad hacia la red interna de R2 |
+| `ipconfig /all` | Cliente Windows 7 | Confirma la IP asignada del pool VPN en el adaptador VPN |
+| `ping 20.25.37.2` | Cliente Windows 7 | Conectividad hacia la red interna de R2 |
 
 ---
 
@@ -558,13 +575,13 @@ PING 20.25.37.2 (20.25.37.2) 56(84) bytes of data.
 | 1 | [`01_topologia.png`](screenshots/01_topologia.png) | Topología funcional en PNETLab con nombre completo y matrícula (`20250737`) visibles, todos los dispositivos encendidos. |
 | 2 | [`02_config_r2_isakmp.png`](screenshots/02_config_r2_isakmp.png) | Consola de R2 mostrando la `crypto isakmp policy 10` con 3DES/SHA/PSK y el `crypto isakmp key` con wildcard `0.0.0.0`. |
 | 3 | [`03_config_r2_vpdn.png`](screenshots/03_config_r2_vpdn.png) | Consola de R2 mostrando el `vpdn-group L2TP-CLIENTES`, el `Virtual-Template1` y el `ip local pool POOL-VPN`. |
-| 4 | [`04_cliente_linux_config.png`](screenshots/04_cliente_linux_config.png) | Terminal del Cliente mostrando los archivos de configuración `ipsec.conf` y `xl2tpd.conf` aplicados. |
-| 5 | [`05_cliente_conexion_inicio.png`](screenshots/05_cliente_conexion_inicio.png) | Terminal del Cliente mostrando los comandos de inicio de la VPN (`ipsec up` y escritura en `l2tp-control`). |
+| 4 | [`04_cliente_win7_config_vpn.png`](screenshots/04_cliente_win7_config_vpn.png) | Ventana de propiedades de la conexión VPN en Windows 7 mostrando tipo L2TP/IPSec y la clave precompartida `MiClaveVPN123` configurada. |
+| 5 | [`05_cliente_win7_registro.png`](screenshots/05_cliente_win7_registro.png) | Editor de registro (`regedit`) mostrando la clave `AssumeUDPEncapsulationContextOnSendRule` con valor `2` — fix para L2TP detrás de NAT. |
 | 6 | [`06_isakmp_sa_qmidle.png`](screenshots/06_isakmp_sa_qmidle.png) | Salida de `show crypto isakmp sa` en R2 mostrando estado `QM_IDLE` con la IP del cliente. |
 | 7 | [`07_vpdn_session_est.png`](screenshots/07_vpdn_session_est.png) | Salida de `show vpdn session` en R2 mostrando `cliente1` con estado `est` y la interfaz `Vi1`. |
 | 8 | [`08_pool_in_use.png`](screenshots/08_pool_in_use.png) | Salida de `show ip local pool POOL-VPN` mostrando `In use: 1` — IP asignada al cliente. |
-| 9 | [`09_ppp0_ip_asignada.png`](screenshots/09_ppp0_ip_asignada.png) | Terminal del Cliente mostrando `ip addr show ppp0` con la IP `20.25.37.100` asignada por el servidor. |
-| 10 | [`10_ping_red_interna.png`](screenshots/10_ping_red_interna.png) | Ping exitoso desde el Cliente hacia PC1 (`20.25.37.2`) con la VPN activa, TTL=63. |
+| 9 | [`09_win7_ipconfig_vpn.png`](screenshots/09_win7_ipconfig_vpn.png) | Salida de `ipconfig /all` en Windows 7 mostrando el adaptador VPN con IP asignada `20.25.37.100` del pool del servidor. |
+| 10 | [`10_ping_red_interna.png`](screenshots/10_ping_red_interna.png) | Ping exitoso desde el Cliente Windows 7 (cmd) hacia PC1 (`20.25.37.2`) con la VPN activa, TTL=63. |
 
 ---
 
@@ -611,10 +628,12 @@ Esta configuración es la base de **FlexVPN** y es soportada nativamente por iOS
 * ✅ Reloj del sistema operativo visible evidenciando fecha y hora actual.
 * ✅ Rostro y voz del autor realizando la explicación técnica del laboratorio.
 * ✅ Configuración de R2 (servidor L2TP) mostrando los bloques IKEv1, IPSec, VPDN y Virtual-Template.
-* ✅ Inicio de la conexión VPN desde el cliente Linux.
+* ✅ Configuración de la conexión VPN en Windows 7 (tipo L2TP/IPSec, PSK, usuario/contraseña).
+* ✅ Clave de registro `AssumeUDPEncapsulationContextOnSendRule = 2` aplicada.
+* ✅ Inicio de la conexión desde Windows 7 y autenticación exitosa.
 * ✅ `show crypto isakmp sa` en R2 mostrando `QM_IDLE`.
-* ✅ `show vpdn session` mostrando `cliente1` en estado `est`.
-* ✅ `ip addr show ppp0` en el cliente mostrando la IP asignada del pool.
+* ✅ `show vpdn session` en R2 mostrando `cliente1` en estado `est`.
+* ✅ `ipconfig /all` en Windows 7 mostrando la IP `20.25.37.100` asignada por el pool VPN.
 * ✅ Ping exitoso desde el cliente hacia PC1 (`20.25.37.2`) con la VPN activa.
 
 ---
