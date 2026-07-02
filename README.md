@@ -646,8 +646,6 @@ Esta configuración es la base de **FlexVPN** y es soportada nativamente por iOS
 
 🎥 **[Ver demostración en YouTube](#)**
 
-> *(Enlace disponible en `videos.txt` en la raíz del repositorio)*
-
 **Duración:** máximo 8 minutos
 
 **Contenido del video:**
