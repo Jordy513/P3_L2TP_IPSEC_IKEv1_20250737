@@ -40,6 +40,8 @@ El objetivo de este laboratorio es **implementar y verificar una VPN Client-to-S
 * La asignación dinámica de direcciones IP a los clientes conectados mediante un pool local (`20.25.37.100–20.25.37.110`), permitiendo que el cliente acceda a la red interna del servidor como si estuviera conectado localmente.
 * La verificación de conectividad desde el cliente remoto hacia la red interna (`20.25.37.0/25`) a través del túnel L2TP/IPSec establecido con R2.
 
+Este laboratorio se realiza en un entorno controlado con fines **exclusivamente educativos** dentro del curso de Seguridad de Redes del ITLA.
+
 ---
 
 ## 2. Marco Teórico
@@ -61,21 +63,21 @@ L2TP/IPSec es el protocolo VPN **nativo en Windows, macOS, iOS y Android** — n
 ```
 CLIENTE                                          SERVIDOR (R2)
 ─────────────────────────────────────────────────────────────
-  │                                                     │
+  │                                                      │
   │  ┌─────────────────────────────────────────────┐    │
-  │  │            IPSec ESP (cifrado)              │    │
+  │  │           IPSec ESP (cifrado)               │    │
   │  │  ┌──────────────────────────────────────┐   │    │
-  │  │  │        L2TP (túnel UDP 1701)         │   │    │
+  │  │  │     L2TP (túnel UDP 1701)            │   │    │
   │  │  │  ┌───────────────────────────────┐   │   │    │
-  │  │  │  │  PPP (autenticación + datos)  │   │   │    │
+  │  │  │  │   PPP (autenticación + datos) │   │   │    │
   │  │  │  │  ┌────────────────────────┐   │   │   │    │
-  │  │  │  │  │     IP del cliente     │   │   │   │    │
-  │  │  │  │  │     (20.25.37.100)     │   │   │   │    │
+  │  │  │  │  │   IP del cliente       │   │   │   │    │
+  │  │  │  │  │   (20.25.37.100)       │   │   │   │    │
   │  │  │  │  └────────────────────────┘   │   │   │    │
   │  │  │  └───────────────────────────────┘   │   │    │
   │  │  └──────────────────────────────────────┘   │    │
   │  └─────────────────────────────────────────────┘    │
-  │                                                     │
+  │                                                      │
 
 Puertos involucrados:
   UDP 500  → IKE (negociación IPSec)
@@ -118,7 +120,7 @@ IPSec se negocia **primero**, antes de que L2TP empiece — esto garantiza que l
 | **Grupo DH** | Grupo 2 (1024-bit) | Intercambio de clave |
 | **Autenticación PSK** | `MiClaveVPN123` | Valida que el servidor es legítimo |
 | **Cifrado ESP** | 3DES | Cifrado del tráfico L2TP |
-| **Hash ESP** | MD5-HMAC | Integridad del tráfico L2TP |
+| **Hash ESP** | SHA-HMAC | Integridad del tráfico L2TP |
 | **Modo IPSec** | Transport | L2TP encapsula, IPSec solo cifra |
 | **Autenticación usuario** | MS-CHAPv2 / CHAP | Valida usuario/contraseña del cliente |
 | **Usuario VPN** | `cliente1` | Nombre de usuario configurado localmente |
@@ -300,12 +302,19 @@ crypto isakmp nat keepalive 20
 
 ! Transform Set en modo TRANSPORTE — L2TP ya encapsula,
 ! IPSec solo necesita cifrar el payload UDP.
-crypto ipsec transform-set TS-L2TP esp-3des esp-md5-hmac
+! SHA-HMAC en vez de MD5 — más seguro y requerido para
+! que Windows 7 acepte la negociación correctamente.
+crypto ipsec transform-set TS-L2TP esp-3des esp-sha-hmac
  mode transport
+
+! ACL que filtra únicamente el tráfico L2TP (UDP 1701)
+! para que el Dynamic Map solo proteja ese tráfico específico.
+access-list 100 permit udp any any eq 1701
 
 ! Dynamic Map — acepta SAs de peers con IP dinámica
 crypto dynamic-map DMAP 10
  set transform-set TS-L2TP
+ match address 100              ! Aplica IPSec solo al UDP 1701 (L2TP)
 
 ! Crypto Map usando el Dynamic Map
 crypto map CMAP 10 ipsec-isakmp dynamic DMAP
@@ -467,11 +476,28 @@ interface: GigabitEthernet1
     #pkts decaps: 45, #pkts decrypt: 45, #pkts verify: 45
 ```
 
-> Los identifiers muestran `protocolo 17 / puerto 1701` — confirma que IPSec está protegiendo específicamente el tráfico L2TP (UDP 1701).
+> Los identifiers muestran `protocolo 17 / puerto 1701` — confirma que IPSec está protegiendo específicamente el tráfico L2TP (UDP 1701), tal como define la `access-list 100`.
 
 ---
 
-### 5.3 Verificar sesiones VPDN activas
+### 5.3 Verificar hits en la ACL de tráfico L2TP
+
+```cisco
+R2# show access-lists 100
+```
+
+*Salida esperada con cliente conectado:*
+
+```
+Extended IP access list 100
+    10 permit udp any any eq 1701 (XX matches)
+```
+
+> Los `matches` se incrementan con cada paquete L2TP procesado. Si el contador es 0 después de conectar el cliente, IPSec no está capturando el tráfico L2TP correctamente.
+
+---
+
+### 5.4 Verificar sesiones VPDN activas
 
 ```cisco
 R2# show vpdn session
@@ -490,7 +516,7 @@ LocID RemID TunID Intf    Username    State     Last Chg
 
 ---
 
-### 5.4 Verificar la interfaz virtual asignada al cliente
+### 5.5 Verificar la interfaz virtual asignada al cliente
 
 ```cisco
 R2# show ip interface brief | include Virtual
@@ -505,7 +531,7 @@ Virtual-Template1      20.25.37.1      YES unset  up   down
 
 ---
 
-### 5.5 Verificar la IP asignada al cliente desde el pool
+### 5.6 Verificar la IP asignada al cliente desde el pool
 
 ```cisco
 R2# show ip local pool POOL-VPN
@@ -522,7 +548,7 @@ POOL-VPN      20.25.37.100    20.25.37.110    10    1
 
 ---
 
-### 5.6 Verificar conectividad del cliente hacia la red interna
+### 5.7 Verificar conectividad del cliente hacia la red interna
 
 Desde el **Cliente Windows 7** (con la VPN activa), abrir `cmd`:
 
@@ -553,12 +579,13 @@ Buscar el adaptador VPN — debe mostrar una dirección IP en el rango `20.25.37
 
 ---
 
-### 5.7 Tabla de comandos de verificación
+### 5.8 Tabla de comandos de verificación
 
 | Comando | Dónde | Qué muestra |
 |---|---|---|
 | `show crypto isakmp sa` | R2 | SA IKE Fase 1 — debe ser `QM_IDLE` |
 | `show crypto ipsec sa` | R2 | SA IPSec — protocolo 17/1701 en los identifiers |
+| `show access-lists 100` | R2 | Hits en la ACL — confirma que el tráfico UDP 1701 es capturado |
 | `show vpdn session` | R2 | Sesiones L2TP activas y usuarios autenticados |
 | `show vpdn tunnel` | R2 | Información del túnel L2TP establecido |
 | `show ip local pool POOL-VPN` | R2 | IPs del pool en uso |
@@ -589,7 +616,7 @@ Buscar el adaptador VPN — debe mostrar una dirección IP en el rango `20.25.37
 
 ### 7.1 Debilidades de esta configuración
 
-* **3DES y MD5:** Algoritmos considerados legacy. 3DES tiene vulnerabilidades conocidas (SWEET32) y MD5 está comprometido criptográficamente. Se usan aquí por compatibilidad con clientes L2TP nativos de Windows/Linux que no siempre soportan AES en IKEv1 L2TP.
+* **3DES:** Algoritmo considerado legacy con vulnerabilidades conocidas (SWEET32). Se usa aquí por compatibilidad con clientes L2TP nativos de Windows 7 que no siempre negocian AES en IKEv1 L2TP.
 * **PSK wildcard:** El servidor acepta conexiones de cualquier IP con la PSK correcta — cualquier persona que conozca `MiClaveVPN123` puede iniciar la negociación IPSec.
 * **MS-CHAPv2:** Vulnerable a ataques de diccionario offline si se captura el handshake. En producción se reemplaza por EAP-TLS con certificados.
 * **Grupo DH 2:** 1024-bit — considerado insuficiente desde 2015. El mínimo recomendado hoy es Grupo 14 (2048-bit).
@@ -619,6 +646,8 @@ Esta configuración es la base de **FlexVPN** y es soportada nativamente por iOS
 ## 8. Video Demostrativo
 
 🎥 **[Ver demostración en YouTube](#)**
+
+> *(Enlace disponible en `videos.txt` en la raíz del repositorio)*
 
 **Duración:** máximo 8 minutos
 
