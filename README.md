@@ -646,7 +646,7 @@ Esta configuración es la base de **FlexVPN** y es soportada nativamente por iOS
 
 🎥 **[Ver demostración en YouTube](https://youtu.be/x8pZSbSpcSI)**
 
-**Duración:** máximo 8 minutos
+**Duración:** 8:24
 
 **Contenido del video:**
 
