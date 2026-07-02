@@ -1,0 +1,147 @@
+! ══════════════════════════════════════════════════════
+! ISP | Router de tránsito
+! Jordy Rosario — 20250737 | Seguridad de Redes 2026-C-2
+! ══════════════════════════════════════════════════════
+
+hostname R-ISP
+
+interface Ethernet0/0
+ description hacia-R1
+ ip address 192.168.1.1 255.255.255.252
+ no shutdown
+
+interface Ethernet0/1
+ description hacia-R2
+ ip address 192.168.1.5 255.255.255.252
+ no shutdown
+
+-------------------------------------------------------------------------------------------
+
+! ══════════════════════════════════════════════════════
+! R1 — Red del Cliente | Solo enrutamiento
+! Jordy Rosario — 20250737 | Seguridad de Redes 2026-C-2
+! ══════════════════════════════════════════════════════
+
+hostname R1
+
+interface Ethernet0/0
+ description WAN-hacia-ISP
+ ip address 192.168.1.2 255.255.255.252
+ no shutdown
+
+interface Ethernet0/1
+ description LAN-Cliente
+ ip address 20.25.37.129 255.255.255.128
+ no shutdown
+
+! Ruta por defecto hacia Internet
+ip route 0.0.0.0 0.0.0.0 192.168.1.1
+
+------------------------------------------------------------------------------------------------
+
+! ══════════════════════════════════════════════════════
+! R2 — Servidor L2TP/IPSec | IKEv1
+! Jordy Rosario — 20250737 | Seguridad de Redes 2026-C-2
+! ══════════════════════════════════════════════════════
+
+hostname R2
+
+! ─── Interfaces físicas ────────────────────────────────
+interface GigabitEthernet1
+ description WAN-hacia-ISP
+ ip address 192.168.1.6 255.255.255.252
+ no shutdown
+
+interface GigabitEthernet2
+ description LAN-Interna
+ ip address 20.25.37.1 255.255.255.128
+ no shutdown
+
+! ─── Rutas ─────────────────────────────────────────────
+ip route 0.0.0.0 0.0.0.0 192.168.1.5
+! Ruta de retorno hacia la LAN del Cliente (para que R2 sepa
+! como responder al cliente una vez conectado vía VPN)
+ip route 20.25.37.128 255.255.255.128 192.168.1.2
+
+! ══════════════════════════════════════════════════════
+! PASO 1: AAA — autenticación de usuarios PPP
+! ══════════════════════════════════════════════════════
+! aaa new-model habilita el framework de autenticación.
+! La política "default" aplica a todas las conexiones PPP.
+aaa new-model
+aaa authentication ppp default local
+
+! ─── Usuarios locales ──────────────────────────────────
+username cliente1 password cisco123
+
+! ══════════════════════════════════════════════════════
+! PASO 2: IKEv1 — protege el canal L2TP con IPSec
+! ══════════════════════════════════════════════════════
+
+! ISAKMP Policy — IKE Fase 1
+crypto isakmp policy 10
+ encryption 3des
+ hash sha
+ authentication pre-share
+ group 2
+ lifetime 86400
+
+! PSK wildcard — acepta conexiones desde cualquier IP de cliente
+! (necesario porque los clientes pueden tener IPs dinámicas)
+crypto isakmp key MiClaveVPN123 address 0.0.0.0 0.0.0.0
+
+! Keepalive para detectar clientes desconectados detrás de NAT
+crypto isakmp nat keepalive 20
+
+! ══════════════════════════════════════════════════════
+! PASO 3: IPSec — cifra el tráfico L2TP (UDP 1701)
+! ══════════════════════════════════════════════════════
+
+! Transform Set en modo TRANSPORTE — L2TP ya encapsula,
+! IPSec solo necesita cifrar el payload UDP.
+! SHA-HMAC en vez de MD5 — más seguro y requerido para
+! que Windows 7 acepte la negociación correctamente.
+crypto ipsec transform-set TS-L2TP esp-3des esp-sha-hmac
+ mode transport
+
+! ACL que filtra únicamente el tráfico L2TP (UDP 1701)
+! para que el Dynamic Map solo proteja ese tráfico específico.
+access-list 100 permit udp any any eq 1701
+
+! Dynamic Map — acepta SAs de peers con IP dinámica
+crypto dynamic-map DMAP 10
+ set transform-set TS-L2TP
+ match address 100              ! Aplica IPSec solo al UDP 1701 (L2TP)
+
+! Crypto Map usando el Dynamic Map
+crypto map CMAP 10 ipsec-isakmp dynamic DMAP
+
+! Aplicar el Crypto Map a la interfaz WAN
+interface GigabitEthernet1
+ crypto map CMAP
+
+! ══════════════════════════════════════════════════════
+! PASO 4: VPDN — servidor L2TP
+! ══════════════════════════════════════════════════════
+
+vpdn enable
+
+vpdn-group L2TP-CLIENTES
+ accept-dialin
+  protocol l2tp
+  virtual-template 1          ! Usa la plantilla de interfaz virtual
+ no l2tp tunnel authentication ! Sin autenticación adicional del túnel L2TP
+
+! ══════════════════════════════════════════════════════
+! PASO 5: Pool de IPs y Virtual-Template
+! ══════════════════════════════════════════════════════
+
+! Pool de direcciones asignadas a los clientes VPN
+ip local pool POOL-VPN 20.25.37.100 20.25.37.110
+
+! Virtual-Template — plantilla para crear interfaces
+! virtuales dinámicas por cada cliente conectado
+interface Virtual-Template1
+ ip unnumbered GigabitEthernet2   ! Usa la IP de Gi2 (20.25.37.1)
+ peer default ip address pool POOL-VPN
+ ppp authentication ms-chap-v2 chap
