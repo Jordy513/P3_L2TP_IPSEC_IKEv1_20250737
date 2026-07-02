@@ -603,12 +603,11 @@ Buscar el adaptador VPN — debe mostrar una dirección IP en el rango `20.25.37
 | 2 | [`02_config_r2_isakmp.png`](screenshots/02_config_r2_isakmp.png) | Consola de R2 mostrando la `crypto isakmp policy 10` con 3DES/SHA/PSK y el `crypto isakmp key` con wildcard `0.0.0.0`. |
 | 3 | [`03_config_r2_vpdn.png`](screenshots/03_config_r2_vpdn.png) | Consola de R2 mostrando el `vpdn-group L2TP-CLIENTES`, el `Virtual-Template1` y el `ip local pool POOL-VPN`. |
 | 4 | [`04_cliente_win7_config_vpn.png`](screenshots/04_cliente_win7_config_vpn.png) | Ventana de propiedades de la conexión VPN en Windows 7 mostrando tipo L2TP/IPSec y la clave precompartida `MiClaveVPN123` configurada. |
-| 5 | [`05_cliente_win7_registro.png`](screenshots/05_cliente_win7_registro.png) | Editor de registro (`regedit`) mostrando la clave `AssumeUDPEncapsulationContextOnSendRule` con valor `2` — fix para L2TP detrás de NAT. |
-| 6 | [`06_isakmp_sa_qmidle.png`](screenshots/06_isakmp_sa_qmidle.png) | Salida de `show crypto isakmp sa` en R2 mostrando estado `QM_IDLE` con la IP del cliente. |
-| 7 | [`07_vpdn_session_est.png`](screenshots/07_vpdn_session_est.png) | Salida de `show vpdn session` en R2 mostrando `cliente1` con estado `est` y la interfaz `Vi1`. |
-| 8 | [`08_pool_in_use.png`](screenshots/08_pool_in_use.png) | Salida de `show ip local pool POOL-VPN` mostrando `In use: 1` — IP asignada al cliente. |
-| 9 | [`09_win7_ipconfig_vpn.png`](screenshots/09_win7_ipconfig_vpn.png) | Salida de `ipconfig /all` en Windows 7 mostrando el adaptador VPN con IP asignada `20.25.37.100` del pool del servidor. |
-| 10 | [`10_ping_red_interna.png`](screenshots/10_ping_red_interna.png) | Ping exitoso desde el Cliente Windows 7 (cmd) hacia PC1 (`20.25.37.2`) con la VPN activa, TTL=63. |
+| 5 | [`06_isakmp_sa_qmidle.png`](screenshots/06_isakmp_sa_qmidle.png) | Salida de `show crypto isakmp sa` en R2 mostrando estado `QM_IDLE` con la IP del cliente. |
+| 6 | [`07_vpdn_session_est.png`](screenshots/07_vpdn_session_est.png) | Salida de `show vpdn session` en R2 mostrando `cliente1` con estado `est` y la interfaz `Vi1`. |
+| 7 | [`08_pool_in_use.png`](screenshots/08_pool_in_use.png) | Salida de `show ip local pool POOL-VPN` mostrando `In use: 1` — IP asignada al cliente. |
+| 8 | [`09_win7_ipconfig_vpn.png`](screenshots/09_win7_ipconfig_vpn.png) | Salida de `ipconfig /all` en Windows 7 mostrando el adaptador VPN con IP asignada `20.25.37.100` del pool del servidor. |
+| 9 | [`10_ping_red_interna.png`](screenshots/10_ping_red_interna.png) | Ping exitoso desde el Cliente Windows 7 (cmd) hacia PC1 (`20.25.37.2`) con la VPN activa, TTL=63. |
 
 ---
 
